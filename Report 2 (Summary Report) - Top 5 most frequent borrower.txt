@@ -1,0 +1,47 @@
+CREATE OR REPLACE PROCEDURE prc_top_borrower (inputYear IN NUMBER)IS
+	
+	CURSOR topBorrower_cursor IS
+		SELECT BT.borrowerID, B.borrowerName, BTY.borrowerTypeDesc,
+		       COUNT(BT.bTransID) AS TotalTransactions,
+		       B.noOfLateReturn, B.noOfBookLost
+		FROM BORROWER_TRANS BT, BORROWER B, BORROWER_TYPE BTY
+		WHERE BT.borrowerID = B.borrowerID AND
+		      B.borrowerTypeID = BTY.borrowerTypeID AND
+                      B.noOfLateReturn = 0 AND
+		      B.noOfBookLost = 0 AND
+		      EXTRACT(YEAR FROM BT.actualReturnDate) = inputYear
+		GROUP BY BT.borrowerID, B.borrowerName, BTY.borrowerTypeDesc, B.noOfLateReturn, B.noOfBookLost
+		ORDER BY COUNT(BT.bTransID) DESC
+		FETCH FIRST 5 ROWS ONLY;
+
+	total_lecturer NUMBER(2) := 0;
+	total_student NUMBER(2) := 0;
+
+BEGIN
+	DBMS_OUTPUT.PUT_LINE (chr(10) || RPAD('*', 50, ' ') || 'Report generated on : ' || TO_CHAR(SYSDATE, 'DD-MM-YYYY HH:MI:SS'));
+	DBMS_OUTPUT.PUT_LINE (chr(10) || RPAD('*', 30, ' ')  || 'TOP 5 Most Frequent Borrower IN year ' || inputYear);
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',90,'-') || '|');
+	DBMS_OUTPUT.PUT_LINE('|' || RPAD('Borrower ID',15,' ') ||' | '|| RPAD('Borrower Name',25,' ') || '| '
+				 || RPAD('Borrower Type',15,' ') || '| ' || RPAD('Total number of transactions',28,' ') || '|');
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',90,'-') || '|');
+
+	FOR rec IN topBorrower_cursor LOOP
+		IF rec.borrowerTypeDesc = 'Lecturer' THEN
+			total_lecturer := total_lecturer + 1;
+		ELSE
+			total_student := total_student + 1;
+		END IF;
+
+		DBMS_OUTPUT.PUT_LINE('|' || RPAD(rec.borrowerID,15,' ') ||' | '|| RPAD(rec.borrowerName,25,' ') || '| '
+					 || RPAD(rec.borrowerTypeDesc,15,' ') || '| ' || RPAD('           ' || rec.TotalTransactions,28,' ') || '|');
+	END LOOP;
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',90,'-') || '|');
+	DBMS_OUTPUT.PUT_LINE(chr(10));
+	DBMS_OUTPUT.PUT_LINE(RPAD('Total number of lecturer ',30,' ' )|| ': ' || total_lecturer);
+	DBMS_OUTPUT.PUT_LINE(RPAD('Total number of student ',30,' ' )|| ': ' || total_student);
+	DBMS_OUTPUT.PUT_LINE(chr(10) || RPAD('-', 40, '-') || 'END OF REPORT' || RPAD('-', 40, '-'));
+ END;
+/
+
+ACCEPT INPUT_YEAR DATE FORMAT 'YYYY' PROMPT 'Enter year >'
+EXEC prc_top_borrower (&INPUT_YEAR)

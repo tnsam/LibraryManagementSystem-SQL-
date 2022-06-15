@@ -1,0 +1,34 @@
+CLEAR COLUMNS
+CLEAR BREAKS
+CLEAR COMPUTES
+CLEAR BUFFER
+TTITLE OFF
+CLEAR SCREEN
+
+SET LINESIZE 120
+SET PAGESIZE 100
+COLUMN "Borrower ID" FORMAT A11
+COLUMN "Transaction ID" FORMAT A15
+COLUMN "Borrower Name" FORMAT A20
+COLUMN "Book Name" FORMAT A35
+COLUMN "Borrowing Status" FORMAT A18
+
+BREAK ON "Borrower ID" ON "Borrower Name" SKIP1
+
+
+TTITLE CENTER '===================================================================' SKIP 1 -
+CENTER 'Borrower with BOOK LOST transaction status to be blacklisted' SKIP 1 -
+CENTER '===================================================================' SKIP 1-
+LEFT 'Page: ' FORMAT 999 SQL.PNO SKIP 1
+REPFOOTER SKIP 1 CENTER '---- END ----' SKIP 1
+
+SELECT B.borrowerID AS "Borrower ID", B.borrowerName AS "Borrower Name", 
+       BT.bTransID AS "Transaction ID", BO.bookName AS "Book Name", 
+       BTS.borrowerTransDesc AS "Borrowing Status"
+FROM BORROWER B, BORROWER_TRANS BT, BOOK BO, BORROWER_TRANS_STATUS BTS
+WHERE B.borrowerID = BT.borrowerID AND
+      BT.ISBN = BO.ISBN AND
+      BT.borrowerTransStatusID = BTS.borrowerTransStatusID AND
+      BTS.borrowerTransStatusID = 'TS999' AND
+      B.noOfBookLost >= 3
+ORDER BY B.borrowerID;

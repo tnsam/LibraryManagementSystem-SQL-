@@ -1,0 +1,26 @@
+Procedure 1:
+--Error
+EXEC borrow_book ('S9999', 9780385121675, 'ST001')
+EXEC borrow_book ('S1111', 9780385121, 'ST001')
+EXEC borrow_book ('S1234', 9780385121675, 'ST999')
+
+--correct
+EXEC borrow_book ('S1119', 9781594483295, 'ST001')
+EXEC borrow_book ('S1121', 9781587678011, 'ST006')
+
+--for trigger 1
+EXEC borrow_book ('S1116', 9781732748545, 'ST001')
+EXEC borrow_book ('S1131', 9781982182632, 'ST001')
+EXEC borrow_book ('L1121', 9781594483295, 'ST001')
+
+--FOR TRIGGER 2
+EXEC borrow_book ('S1119', 9781594483295, 'ST001')
+
+--FOR TRIGGER 4
+COLUMN transID FORMAT A10
+COLUMN oldTransStatus FORMAT A20
+COLUMN newTransStatus FORMAT A20
+COLUMN userName FORMAT A15
+COLUMN amendedDate FORMAT A15
+
+SELECT * FROM BORROWER_UPDATE_AUDIT;

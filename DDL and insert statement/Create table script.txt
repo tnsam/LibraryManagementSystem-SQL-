@@ -1,0 +1,200 @@
+DROP TABLE BORROWER_TYPE;
+DROP TABLE BORROWER_TRANS_STATUS; 
+DROP TABLE STAFF_POSITION;
+DROP TABLE STAFF;
+DROP TABLE BOOK_CATEGORY;
+DROP TABLE BOOK_PUBLISHER;
+DROP TABLE BOOK_AUTHOR;
+DROP TABLE ROOM;
+DROP TABLE BORROWER;
+DROP TABLE BOOK;
+DROP TABLE BORROWER_TRANS;
+DROP TABLE ROOM_TRANS;
+DROP TABLE STAFF_ACTIVITY_STATUS;
+DROP TABLE STAFF_SALARY;
+
+CREATE TABLE BORROWER_TYPE(
+	borrowerTypeID    	         CHAR(5)      NOT NULL,
+	borrowerTypeDesc 		 CHAR(20)	  NOT NULL,
+	maxBooksCanBorrow		 NUMBER(1)    NOT NULL,
+	maxBorrowDuration		 NUMBER(2)	  NOT NULL,	
+	PRIMARY KEY(borrowerTypeID),
+	CONSTRAINT chk_maxBooksCanBorrow CHECK (maxBooksCanBorrow >= 0),
+	CONSTRAINT chk_maxBorrowDuration CHECK (maxBorrowDuration >= 0),
+	CONSTRAINT chk_borrowerTypeDesc CHECK (borrowerTypeDesc IN ('Student', 'Lecturer'))
+);
+
+
+CREATE TABLE BORROWER_TRANS_STATUS (
+	borrowerTransStatusID    	CHAR(5)      NOT NULL,
+	borrowerTransDesc 		CHAR(20)	  NOT NULL,
+	PRIMARY KEY(borrowerTransStatusID),
+	CONSTRAINT chk_borrowerTransDesc  CHECK (borrowerTransDesc IN ('Borrow', 'Returned', 'Late Return', 'Book Lost'))
+);
+
+
+CREATE TABLE STAFF_POSITION(
+    staffPost  varchar2(30) NOT NULL,
+    postSalary number(6)    NOT NULL,
+    PRIMARY KEY(staffPost)
+);
+
+
+CREATE TABLE STAFF (
+   staffID     char(5)     NOT NULL,
+   staffName   varchar2(30) NOT NULL,
+   staffIC     char(12)   NOT NULL,
+   staffEmail  varchar2(50) NOT NULL,
+   staffPost   varchar2(30) NOT NULL,
+   PRIMARY KEY(staffID),
+   CONSTRAINT chk_staffEmail CHECK (staffEmail LIKE '%_@tarc.edu.my%'),
+   FOREIGN KEY(staffPost) REFERENCES STAFF_POSITION(staffPost)
+);
+
+
+CREATE TABLE BOOK_CATEGORY(
+       bookID              CHAR(4) NOT NULL,
+       bookType            VARCHAR(30),
+       PRIMARY KEY (bookID)
+);
+
+
+CREATE TABLE BOOK_PUBLISHER(
+  publisherID            CHAR(4) NOT NULL,
+  publisherName       VARCHAR(30),
+  yearOfPublication  NUMBER(4),
+  PRIMARY KEY (publisherId)
+);
+
+
+CREATE TABLE BOOK_AUTHOR(
+  authorID                 CHAR(4) NOT NULL,
+  authorName            VARCHAR(30),
+  PRIMARY KEY (authorID)
+);
+
+
+CREATE Table ROOM(
+	roomID char(5) NOT NULL,
+	roomType varchar(12) NOT NULL,
+	roomStatus varchar2(10) NOT NULL,
+	roomSize Number(2) NOT NULL,
+PRIMARY KEY(RoomID),
+CONSTRAINT chk_roomType CHECK (roomType IN ('DISCUSSION','PRESENTATION')),
+CONSTRAINT chk_roomStatus CHECK (roomStatus IN ('AVAILABLE', 'OCCUPIED')),
+CONSTRAINT chk_roomSize CHECK (roomSize >= 0)
+);
+
+
+CREATE TABLE BORROWER(
+	borrowerID    		CHAR(5)      NOT NULL,
+	borrowerName      	VARCHAR(30)   NOT NULL,
+	borrowerEmail    	VARCHAR(50)   NOT NULL,
+	noOfBooksOnHand     NUMBER(1)     NOT NULL,
+	noOfBookLost        NUMBER(1)     NOT NULL,
+	noOfLateReturn    	NUMBER(1)     NOT NULL,
+	borrowerTypeID  	CHAR(5)       NOT NULL,
+	PRIMARY KEY(borrowerID),
+	FOREIGN KEY(borrowerTypeID) REFERENCES BORROWER_TYPE(borrowerTypeID), 
+	CONSTRAINT chk_borrowerEmail CHECK (borrowerEmail LIKE '%___@___%.__%') 
+);
+
+
+CREATE TABLE BOOK(
+  ISBN                      CHAR(13) NOT NULL,
+  bookName              VARCHAR(100) NOT NULL,
+  bookCount             NUMBER(2),
+  bookRemainCount NUMBER(2),
+  bookPrice               NUMBER(5,2),
+  bookAvailable        CHAR(3),
+  dateArrival             Date NOT NULL,
+  bookID                   CHAR(4),
+  authorID                 CHAR(4),
+  publisherID             CHAR(4),
+  CONSTRAINT pk_book PRIMARY KEY (ISBN),
+  CONSTRAINT fk_book_category FOREIGN KEY (bookID) REFERENCES BOOK_CATEGORY (bookID),
+  CONSTRAINT fk_book_author FOREIGN KEY  (authorID) REFERENCES BOOK_AUTHOR (authorID),
+  CONSTRAINT fk_book_publisher FOREIGN KEY (publisherID) REFERENCES BOOK_PUBLISHER (publisherID),
+  CONSTRAINT chk_bookRemainCount CHECK (bookRemainCount <= bookCount),
+  CONSTRAINT chk_bookCount CHECK (bookCount >= 0),
+  CONSTRAINT chk_bookPrice CHECK (bookPrice > 1),
+  CONSTRAINT chk_bookAvailable CHECK (bookAvailable IN ('Yes', 'No'))
+);
+
+
+CREATE TABLE BORROWER_TRANS(
+	bTransID    			 CHAR(5)      NOT NULL,
+	bStartDate		         DATE	      NOT NULL,
+	returnDate			 DATE	      NOT NULL,
+	actualReturnDate		 DATE,
+        finesAmt		         NUMBER(5,2),
+	borrowerID    			 CHAR(5)      NOT NULL,       
+	ISBN			         CHAR(13)     NOT NULL,
+	borrowerTransStatusID 	         CHAR(5)      NOT NULL,
+	staffID			         CHAR(5)      NOT NULL,
+	PRIMARY KEY(bTransID),
+	FOREIGN KEY(borrowerID) REFERENCES BORROWER(borrowerID), 
+	FOREIGN KEY(ISBN) REFERENCES BOOK(ISBN),
+	FOREIGN KEY(borrowerTransStatusID) REFERENCES BORROWER_TRANS_STATUS(borrowerTransStatusID),
+	FOREIGN KEY(staffID) REFERENCES STAFF(staffID), 
+	CONSTRAINT chk_returnDate CHECK (returnDate > bStartDate),
+	CONSTRAINT chk_actualReturnDate CHECK (actualReturnDate >= bStartDate) 
+);
+
+
+CREATE TABLE ROOM_TRANS(
+	rTransactionID CHAR(5) NOT NULL,
+	rStartTime TIMESTAMP NOT NULL,
+	rEndTime TIMESTAMP NOT NULL,
+	rDuration NUMBER(1) NOT NULL,
+	rTransactionStatus VARCHAR2(15),
+	staffID CHAR(5) NOT NULL,
+	borrowerID CHAR(5) NOT NULL,
+	roomID CHAR(5) NOT NULL,
+PRIMARY KEY (rTransactionID),
+FOREIGN KEY (staffID) REFERENCES STAFF(staffID),
+FOREIGN KEY (borrowerID) REFERENCES BORROWER(borrowerID),
+FOREIGN KEY (roomID) REFERENCES ROOM(roomID),
+CONSTRAINT chk_rTransactionStatus CHECK (rTransactionStatus IN ('BOOKED','CANCELLED','USED','AVAILABLE'))
+);
+
+
+ALTER SESSION SET NLS_TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS';
+ALTER SESSION SET NLS_DATE_FORMAT='YYYY-MM-DD';
+
+CREATE TABLE STAFF_ACTIVITY_STATUS (
+    recordNo     number(9),
+    staffStatus  char(3)    NOT NULL,
+    workDate     date       DEFAULT ON NULL SYSDATE,
+    staffLogIn   timestamp  DEFAULT ON NULL '9999-12-31 00:00:00',
+    staffLogOut  timestamp  DEFAULT ON NULL '9999-12-31 00:00:00',
+    staffID      char(5)    NOT NULL,
+    PRIMARY KEY (recordNo),
+    CONSTRAINT chk_staffStatus CHECK (staffStatus IN ('IN', 'OUT', 'MC', 'OL')),
+    FOREIGN KEY (staffID) REFERENCES STAFF(staffID)
+);
+ALTER SESSION SET NLS_TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS';
+ALTER SESSION SET NLS_DATE_FORMAT='YYYY-MM-DD';
+
+CREATE SEQUENCE STAFF_RECORD_SEQ
+   START WITH 1
+   INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER RECORDNO_trigger
+   BEFORE INSERT ON STAFF_ACTIVITY_STATUS
+      REFERENCING NEW AS NEW
+      FOR EACH ROW
+   BEGIN
+      SELECT staff_record_seq.nextval INTO :NEW.recordNo FROM dual;
+END;
+/
+
+
+CREATE TABLE STAFF_SALARY(
+    staffID    char(5)      NOT NULL,
+    salaryNum  number(8,2)  NOT NULL,
+    lateNum    number(2)    NOT NULL,
+    lateFine   number(6,2)  NOT NULL,
+    PRIMARY KEY(staffID),
+    FOREIGN KEY(staffID) REFERENCES STAFF(staffID)
+);

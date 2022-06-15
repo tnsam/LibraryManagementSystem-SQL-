@@ -1,0 +1,160 @@
+CREATE OR REPLACE PROCEDURE prc_transaction_report (inputBorrowerID IN BORROWER.borrowerID%TYPE) IS
+	
+	CURSOR borrowerTrans_cursor IS
+		SELECT BT.bTransID, BT.ISBN, BT.bStartDate, BT.actualReturnDate, TO_CHAR(BT.finesAmt, 999.99) AS FINES, BT.borrowerTransStatusID, BTS.borrowerTransDesc
+		FROM BORROWER_TRANS BT, BORROWER_TRANS_STATUS BTS
+		WHERE BT.borrowerTransStatusID = BTS.borrowerTransStatusID AND
+		      BT.borrowerID = UPPER(inputBorrowerID) AND
+                      BT.borrowerTransStatusID <> 'TS123'
+		ORDER BY BT.bStartDate DESC;
+
+	CURSOR favouriteBook_cursor IS
+		SELECT ISBN, COUNT(ISBN)
+		FROM BORROWER_TRANS
+		WHERE borrowerID = UPPER(inputBorrowerID)
+		GROUP BY ISBN	
+		HAVING COUNT(ISBN) > 2	
+		ORDER BY COUNT(ISBN) DESC;
+
+	E_INVALID_BORROWERID EXCEPTION;
+	PRAGMA exception_init(E_INVALID_BORROWERID, -20001);
+	v_borrowerID BORROWER.borrowerID%TYPE;
+	v_borrowerName BORROWER.borrowerName%TYPE;
+	v_borrowerTypeDesc BORROWER_TYPE.borrowerTypeDesc%TYPE;
+	v_bookName BOOK.bookName%TYPE;
+
+	total_trans NUMBER(3) := 0;
+	total_finesAmt BORROWER_TRANS.finesAmt%TYPE := 0;
+	total_lateReturn BORROWER.noOfLateReturn%TYPE := 0;
+	total_bookLost BORROWER.noOfBookLost%TYPE := 0;
+
+	favouriteBookRec favouriteBook_cursor%ROWTYPE;
+	bookCount NUMBER;
+
+BEGIN
+	--CHECK IF THE BORROWER ID AND ISBN VALID OR NOT
+	IF FUN_VALIDATE_BORROWERID(inputBorrowerID) = FALSE THEN
+		RAISE_APPLICATION_ERROR(-20001, 'Invalid Borrower ID!');
+	END IF;
+
+	DBMS_OUTPUT.PUT_LINE (chr(10));
+	DBMS_OUTPUT.PUT_LINE (RPAD('*', 35, ' ') || RPAD('Transaction Report for borrower '|| inputBorrowerID, 50, ' '));
+	DBMS_OUTPUT.PUT_LINE (RPAD('*', 33, ' ') || RPAD('-', 42, '-') ||chr(10));
+	DBMS_OUTPUT.PUT_LINE (RPAD('*', 60, ' ') || 'Report generated on : ' || TO_CHAR(SYSDATE, 'DD-MM-YYYY HH:MI:SS'));
+
+
+	SELECT B.borrowerID, B.borrowerName, BT.borrowerTypeDesc INTO v_borrowerID, v_borrowerName, v_borrowerTypeDesc
+	FROM BORROWER B, BORROWER_TYPE BT
+	WHERE B.borrowerTypeID = BT.borrowerTypeID AND
+	      B.borrowerID = UPPER(inputBorrowerID);
+
+	DBMS_OUTPUT.PUT_LINE (chr(10));
+	DBMS_OUTPUT.PUT_LINE ('  Borrower Profile ');
+	DBMS_OUTPUT.PUT_LINE (RPAD('*', 16, '*'));
+	DBMS_OUTPUT.PUT_LINE (RPAD('Borrower ID',20,' ' )|| ': ' || v_borrowerID);
+	DBMS_OUTPUT.PUT_LINE (RPAD('Borrower Name',20,' ') || ': ' || v_borrowerName);
+	DBMS_OUTPUT.PUT_LINE (RPAD('Borrower Type',20,' ') || ': ' || v_borrowerTypeDesc || chr(10));
+
+
+	DBMS_OUTPUT.PUT_LINE (chr(10) || RPAD('*', 40, ' ')  || 'Past Borrower Transactions');
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',102,'-') || '|');
+	DBMS_OUTPUT.PUT_LINE('|' || RPAD('Transaction ID',15,' ') ||' | '|| RPAD('ISBN',15,' ') || '|'
+				|| RPAD('Start Date',15,' ') || '|' || RPAD('Return Date',15,' ') || '|'
+				|| RPAD('Fines Amount',15,' ') || '|'|| RPAD('Transaction Status',20,' ') || '|');
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',102,'-') || '|');
+
+	FOR transRec IN borrowerTrans_cursor LOOP
+
+		total_trans := total_trans + 1;
+
+		IF transRec.FINES IS NOT NULL THEN
+			total_finesAmt := total_finesAmt + transRec.FINES;
+		END IF;
+		
+		IF transRec.borrowerTransStatusID = 'TS789' THEN
+			total_lateReturn := total_lateReturn + 1;
+		ELSIF transRec.borrowerTransStatusID = 'TS999' THEN
+			total_bookLost := total_bookLost + 1;
+		END IF;		
+
+		IF transRec.actualReturnDate IS NULL AND transRec.FINES IS NULL THEN
+			DBMS_OUTPUT.PUT_LINE('|' || RPAD(transRec.bTransID,15,' ') ||'  '|| 
+					    RPAD(transRec.ISBN,16,' ') || ' ' || 
+					    RPAD(' ' || transRec.bStartDate,16,' ') || ' ' || 
+					    RPAD('   *',16,' ') || ' '||
+					    RPAD('   *',16,' ') || ' '|| 
+					    RPAD(transRec.borrowerTransDesc,17,' ') || '|');
+		
+		ELSIF transRec.actualReturnDate IS NULL THEN
+			DBMS_OUTPUT.PUT_LINE('|' || RPAD(transRec.bTransID,15,' ') ||'  '|| 
+					    RPAD(transRec.ISBN,16,' ') || ' ' || 
+					    RPAD(' ' || transRec.bStartDate,16,' ') || ' ' || 
+					    RPAD('   *',16,' ') || ' '||
+					    RPAD(' ' || transRec.FINES,16,' ') || ' '|| 
+					    RPAD(transRec.borrowerTransDesc,17,' ') || '|');
+
+		ELSIF transRec.FINES IS NULL THEN
+			DBMS_OUTPUT.PUT_LINE('|' || RPAD(transRec.bTransID,15,' ') ||'  '|| 
+					    RPAD(transRec.ISBN,16,' ') || ' ' || 
+					    RPAD(' ' || transRec.bStartDate,16,' ') || ' ' || 
+					    RPAD(transRec.actualReturnDate,16,' ') || ' '||
+					    RPAD('   *',16,' ') || ' '|| 
+					    RPAD(transRec.borrowerTransDesc,17,' ') || '|');
+
+		ELSE
+
+			DBMS_OUTPUT.PUT_LINE('|' || RPAD(transRec.bTransID,15,' ') ||'  '|| 
+					    RPAD(transRec.ISBN,16,' ') || ' ' || 
+					    RPAD(' ' || transRec.bStartDate,16,' ') || ' ' || 
+					    RPAD(transRec.actualReturnDate,16,' ') || ' '||
+					    RPAD(' ' || transRec.FINES,16,' ') || ' '|| 
+					    RPAD(transRec.borrowerTransDesc,17,' ') || '|');
+		END IF;
+		
+	END LOOP;
+
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',102,'-') || '|');		
+	DBMS_OUTPUT.PUT_LINE(chr(10));
+	DBMS_OUTPUT.PUT_LINE (' Favourite books borrowed by borrower ' || inputBorrowerID || ':');
+	DBMS_OUTPUT.PUT_LINE (RPAD('*', 45, '*'));
+	DBMS_OUTPUT.PUT_LINE(RPAD('ISBN',16,' ') ||RPAD('BOOK NAME',50,' '));
+
+	bookCount := 0;
+	OPEN favouriteBook_cursor;
+	LOOP 
+		FETCH favouriteBook_cursor INTO favouriteBookRec;
+	
+		EXIT WHEN favouriteBook_cursor%NOTFOUND;
+
+		SELECT bookName INTO v_bookName
+		FROM BOOK
+		WHERE ISBN = favouriteBookRec.ISBN;
+
+		DBMS_OUTPUT.PUT_LINE(RPAD(favouriteBookRec.ISBN,16,' ') ||RPAD(v_bookName,50,' '));
+		bookCount := bookCount + 1;
+
+	END LOOP;
+
+	IF bookCount = 0 THEN
+		DBMS_OUTPUT.PUT_LINE('No Favourite Book Found!');
+	END IF;
+
+	DBMS_OUTPUT.PUT_LINE(chr(10));
+	DBMS_OUTPUT.PUT_LINE(RPAD('Total number of transactions ',30,' ' )|| ': ' || total_trans);
+	DBMS_OUTPUT.PUT_LINE(RPAD('Total number of late return ',30,' ' )|| ': ' || total_lateReturn);
+	DBMS_OUTPUT.PUT_LINE(RPAD('Total number of book lost ',30,' ' )|| ': ' || total_bookLost);
+	DBMS_OUTPUT.PUT_LINE(RPAD('Total fines amount ',30,' ' )|| ': ' || total_finesAmt);
+	DBMS_OUTPUT.PUT_LINE(chr(10) || RPAD('-', 45, '-') || 'END OF REPORT' || RPAD('-', 45, '-'));
+
+EXCEPTION
+	WHEN E_INVALID_BORROWERID 
+	THEN 
+    		DBMS_OUTPUT.PUT_LINE(SQLERRM);
+
+ END;
+/
+
+SET SERVEROUTPUT ON
+SET LINESIZE 120
+ACCEPT bID CHAR PROMPT 'Enter borrower ID >'
+EXEC prc_transaction_report (UPPER('&bID'))

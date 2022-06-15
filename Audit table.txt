@@ -1,0 +1,24 @@
+DROP TABLE BORROWER_TRANS_AUDIT;
+CREATE TABLE BORROWER_TRANS_AUDIT (
+	transID		 	 CHAR(5),
+	oldFinesAmt		 NUMBER(5,2),
+	newFinesAmt		 NUMBER(5,2),
+	oldTransStatus		 CHAR(5),
+	newTransStatus		 CHAR(5),
+	userName		 VARCHAR(30),
+	amendedDate		 DATE
+);
+
+DROP TABLE BORROWER_UPDATE_AUDIT;
+CREATE TABLE BORROWER_UPDATE_AUDIT (
+	borrowerID	 	 CHAR(5),
+	borrowerName		 VARCHAR(30),
+	oldNoOfBooksOnHand	 NUMBER(3),
+	newNoOfBooksOnHand	 NUMBER(3),
+	oldNoOfBookLost		 NUMBER(3),
+	newNoOfBookLost		 NUMBER(3),
+	oldNoOfLateReturn	 NUMBER(3),
+	newNoOfLateReturn	 NUMBER(3),
+	userName		 VARCHAR(30),
+	amendedDate		 DATE
+);

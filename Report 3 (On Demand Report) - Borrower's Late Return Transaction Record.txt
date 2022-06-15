@@ -1,0 +1,45 @@
+CREATE OR REPLACE VIEW TOTAL_TRANS AS
+	SELECT BT.borrowerID, COUNT(BT.borrowerID) AS TOTAL_TRANSACTION
+	FROM BORROWER_TRANS BT, BORROWER B
+	WHERE BT.borrowerID = B.borrowerID
+	GROUP BY BT.borrowerID;
+
+CREATE OR REPLACE PROCEDURE prc_borrower_late_return IS
+	
+	CURSOR lateReturn_cursor IS
+		SELECT B.borrowerID,  B.borrowerName, B.noOfLateReturn,
+		       TO_CHAR(ROUND((B.noOfLateReturn / T.TOTAL_TRANSACTION) * 100, 2), 999.99) AS Late_Return_Percentage
+		FROM BORROWER B, TOTAL_TRANS T
+		WHERE B.borrowerID  = T.borrowerID AND
+		      B.noOfLateReturn > 0
+		ORDER BY Late_Return_Percentage DESC;
+
+	total_late_return NUMBER(2) := 0;
+
+BEGIN
+
+	DBMS_OUTPUT.PUT_LINE (chr(10) || RPAD('*', 60, ' ') || 'Report generated on : ' || TO_CHAR(SYSDATE, 'DD-MM-YYYY HH:MI:SS'));
+	DBMS_OUTPUT.PUT_LINE (chr(10) || RPAD('*', 35, ' ')  || 'Borrower with LATE RETURN transactions');
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',100,'-') || '|');
+	DBMS_OUTPUT.PUT_LINE('|' || RPAD('Borrower ID',15,' ') ||' | '|| RPAD('Borrower Name',25,' ') || '| '
+				 || RPAD('Number of Late Return',25,' ') || '| ' || RPAD('Late Return Percentage (%)',28,' ') || '|');
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',100,'-') || '|');
+
+	FOR rec IN lateReturn_cursor LOOP
+		total_late_return := total_late_return + 1;
+		DBMS_OUTPUT.PUT_LINE('|' || RPAD(rec.borrowerID,15,' ') ||' | '|| RPAD(rec.borrowerName,25,' ') || '| '
+				         || RPAD('            ' || rec.noOfLateReturn,25,' ') || '| ' 
+					 || RPAD('            ' || rec.Late_Return_Percentage,28,' ') || '|');
+	
+	END LOOP;
+
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',100,'-') || '|');
+	DBMS_OUTPUT.PUT_LINE(chr(10));
+	DBMS_OUTPUT.PUT_LINE(RPAD('Total number of borrowers with LATE RETURN transactions ',60,' ' )|| ': ' || total_late_return);
+	DBMS_OUTPUT.PUT_LINE(chr(10) || RPAD('-', 45, '-') || 'END OF REPORT' || RPAD('-', 45, '-'));
+ END;
+/
+
+SET LINESIZE 150 
+SET SERVEROUTPUT ON
+EXEC prc_borrower_late_return

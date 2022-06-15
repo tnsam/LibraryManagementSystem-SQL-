@@ -1,0 +1,36 @@
+CLEAR COLUMNS
+CLEAR BREAKS
+CLEAR COMPUTES
+CLEAR BUFFER
+TTITLE OFF
+CLEAR SCREEN
+
+SET LINESIZE 190
+SET PAGESIZE 110
+COLUMN "Borrower ID" FORMAT A11
+COLUMN "Transaction ID" FORMAT A15
+COLUMN "Borrower Name" FORMAT A25
+COLUMN "Book Name" FORMAT A40
+COLUMN "Loan Date" FORMAT A15
+COLUMN "Return Date" FORMAT A15
+COLUMN "Borrowing Status" FORMAT A18
+
+
+TTITLE CENTER '===================================================================' SKIP 1 -
+CENTER 'Borrowers who did not return book after due date :' SKIP 1 -
+CENTER '===================================================================' SKIP 1-
+LEFT 'Page: ' FORMAT 999 SQL.PNO SKIP 1
+REPFOOTER SKIP 1 CENTER '---- END ----' SKIP 1
+
+SELECT B.borrowerID AS "Borrower ID", BT.bTransID AS "Transaction ID", 
+       B.borrowerName AS "Borrower Name", BO.bookName AS "Book Name", BT.bstartDate AS "Loan Date", 
+       BT.returnDate AS "Return Date", BTS.borrowerTransDesc AS "Borrowing Status", 
+       ABS(TRUNC(BT.returnDate) - TRUNC(sysdate)) AS "Day Exceeded"
+FROM BORROWER B, BORROWER_TRANS BT, BOOK BO, BORROWER_TRANS_STATUS BTS
+WHERE B.borrowerID = BT.borrowerID AND
+      BT.ISBN = BO.ISBN AND
+      BT.borrowerTransStatusID = BTS.borrowerTransStatusID AND
+      BTS.borrowerTransStatusID = 'TS123' AND
+      BT.actualReturnDate IS NULL  AND
+      (TRUNC(sysdate) - TRUNC(BT.returnDate)) > 14    
+ORDER BY "Day Exceeded" DESC;

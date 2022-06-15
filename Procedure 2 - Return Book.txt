@@ -1,0 +1,208 @@
+SET SERVEROUTPUT ON
+
+ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MON-DD';
+
+CREATE OR REPLACE PROCEDURE return_book (inputBorrowerID IN BORROWER.borrowerID%TYPE, inputISBN IN BOOK.ISBN%TYPE, inputStaffID IN STAFF.staffID%TYPE, IS_LOST IN VARCHAR2) IS
+	E_INVALID_BORROWERID EXCEPTION;
+	E_INVALID_ISBN EXCEPTION;
+	E_INVALID_TRANS EXCEPTION;
+	E_INVALID_STAFFID EXCEPTION;
+	PRAGMA exception_init(E_INVALID_BORROWERID, -20001);
+	PRAGMA exception_init(E_INVALID_ISBN, -20002);
+	PRAGMA exception_init(E_INVALID_TRANS, -20003);
+	PRAGMA exception_init(E_INVALID_STAFFID, -20004);
+	v_bTransID BORROWER_TRANS.bTransID%TYPE;
+	v_borrowerTransStatusID BORROWER_TRANS.borrowerTransStatusID%TYPE;
+	v_returnDate DATE;
+	v_actualReturnDate DATE;
+	v_bStartDate DATE;
+	v_finesAmt BORROWER_TRANS.finesAmt%TYPE;
+
+	before_update_bookCount BOOK.bookCount%TYPE;
+	before_update_bookRemainCount BOOK.bookRemainCount%TYPE;
+	after_update_bookCount BOOK.bookCount%TYPE;
+	after_update_bookRemainCount BOOK.bookRemainCount%TYPE;
+
+	before_update_noOfLateReturn BORROWER.noOfLateReturn%TYPE;
+	before_update_noOfBooksOnHand BORROWER.noOfBooksOnHand%TYPE;
+	before_update_noOfBookLost BORROWER.noOfBookLost%TYPE;
+	after_update_noOfLateReturn BORROWER.noOfLateReturn%TYPE;
+	after_update_noOfBooksOnHand BORROWER.noOfBooksOnHand%TYPE;
+	after_update_noOfBookLost BORROWER.noOfBookLost%TYPE;
+	
+BEGIN
+	--CHECK IF THE BORROWER ID AND ISBN VALID OR NOT
+	IF FUN_VALIDATE_BORROWERID(inputBorrowerID) = FALSE THEN
+		RAISE_APPLICATION_ERROR(-20001, 'Invalid Borrower ID!');
+	ELSIF FUN_VALIDATE_ISBN (inputISBN) = FALSE THEN
+		RAISE_APPLICATION_ERROR(-20002, 'Invalid ISBN!');
+	ELSIF FUN_VALIDATE_STAFFID(inputStaffID) = FALSE THEN
+		RAISE_APPLICATION_ERROR(-20004, 'Invalid Staff ID!'); 
+	END IF;
+
+	--CHECK IF THE BORROWER TRANSACTION EXISTS OR NOT
+	SELECT bTransID into v_bTransID
+	FROM BORROWER_TRANS
+	WHERE borrowerID = inputBorrowerID AND
+	      ISBN = inputISBN AND
+	      borrowerTransStatusID = 'TS123';	
+
+	SELECT bStartDate, returnDate INTO v_bStartDate, v_returnDate
+	FROM BORROWER_TRANS
+	WHERE bTransID = v_bTransID;
+
+	SELECT bookCount, bookRemainCount INTO before_update_bookCount, before_update_bookRemainCount
+	FROM BOOK B
+	WHERE B.ISBN = inputISBN;
+
+	SELECT noOfLateReturn, noOfBooksOnHand, noOfBookLost INTO before_update_noOfLateReturn, before_update_noOfBooksOnHand, before_update_noOfBookLost
+	FROM BORROWER BO
+	WHERE BO.borrowerID = inputBorrowerID;	
+
+	v_finesAmt := 0;
+	
+	IF IS_LOST = 'Y' THEN
+		v_actualReturnDate := NULL;
+
+		--CALCULATE BOOK LOST FINES AMOUNT
+		DBMS_OUTPUT.PUT_LINE(chr(10) || 'BOOK LOST');
+		DBMS_OUTPUT.PUT_LINE('*********');
+		DBMS_OUTPUT.PUT_LINE('FINES AMOUNT : RM ' || TO_CHAR(FUNC_BOOK_LOST_FINES(inputISBN), 999.99));
+
+		UPDATE BORROWER_TRANS
+		SET borrowerTransStatusID = 'TS999',
+		    finesAmt = TO_CHAR(FUNC_BOOK_LOST_FINES(inputISBN), 999.99),
+		    staffID = inputStaffID
+		WHERE bTransID = v_bTransID;
+
+		v_finesAmt := TO_CHAR(FUNC_BOOK_LOST_FINES(inputISBN), 999.99);
+
+		UPDATE BOOK
+		SET bookCount = bookCount - 1
+		WHERE ISBN = inputISBN;	
+
+		UPDATE BORROWER
+		SET noOfBookLost = noOfBookLost + 1,
+		    noOfBooksOnHand = noOfBooksOnHand - 1
+		WHERE borrowerID = inputBorrowerID;
+
+
+	ELSE
+		v_actualReturnDate := TRUNC(SYSDATE);
+
+		IF FUNC_DAY_DIFFERENCE(v_returnDate) > 0 THEN
+			DBMS_OUTPUT.PUT_LINE(chr(10) || 'LATE RETURN');
+			DBMS_OUTPUT.PUT_LINE('***********');
+			DBMS_OUTPUT.PUT_LINE('FINES AMOUNT : RM ' || TO_CHAR(FUNC_LATE_RETURN_FINES(FUNC_DAY_DIFFERENCE(v_returnDate)), 999.99));
+		
+			UPDATE BORROWER_TRANS
+			SET borrowerTransStatusID = 'TS789',
+			    finesAmt = TO_CHAR(FUNC_LATE_RETURN_FINES(FUNC_DAY_DIFFERENCE(v_returnDate)), 999.99),
+			    actualReturnDate = v_actualReturnDate,
+			    staffID = inputStaffID                        
+			WHERE bTransID = v_bTransID;
+
+			v_finesAmt := TO_CHAR(FUNC_LATE_RETURN_FINES(FUNC_DAY_DIFFERENCE(v_returnDate)), 999.99);
+
+			UPDATE BORROWER
+			SET noOfLateReturn = noOfLateReturn + 1,
+		    	    noOfBooksOnHand = noOfBooksOnHand - 1
+			WHERE borrowerID = inputBorrowerID;
+
+
+		ELSE
+			UPDATE BORROWER_TRANS
+			SET borrowerTransStatusID = 'TS456',
+			    finesAmt = 0.0,
+		    	    actualReturnDate = v_actualReturnDate,
+			    staffID = inputStaffID
+			WHERE bTransID = v_bTransID;
+
+			v_finesAmt := 0.0;
+
+			UPDATE BORROWER
+			SET noOfBooksOnHand = noOfBooksOnHand - 1
+			WHERE borrowerID = inputBorrowerID;
+			
+
+		END IF;
+
+		UPDATE BOOK
+		SET bookRemainCount = bookRemainCount + 1
+		WHERE ISBN = inputISBN;
+		
+		DBMS_OUTPUT.PUT_LINE (chr(10) || RPAD('-',60,'-'));	
+		DBMS_OUTPUT.PUT_LINE ('Borrower ' || inputBorrowerID || ' has returned book ' || inputISBN || ' successfully!');
+		DBMS_OUTPUT.PUT_LINE (RPAD('-',60,'-') || chr(10));
+
+	END IF;
+
+	DBMS_OUTPUT.PUT_LINE (chr(10) || RPAD('*', 55, ' ')  || 'Updated Transaction: ');
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',125,'-') || '|');
+	DBMS_OUTPUT.PUT_LINE('| ' || RPAD('Transaction ID',15,' ') ||' | ' || RPAD('Start Date',12,' ') || ' | ' || RPAD('Return Date',12,' ') || ' | '
+			     	|| RPAD('Actual Return Date',18,' ') || ' | ' || RPAD('Fines Amount',12,' ') || ' | ' || RPAD('Borrower ID',11,' ') || ' | '
+				|| RPAD('ISBN',11,' ') || '  | ' || RPAD('Staff ID',10,' ') || ' | ');
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',125,'-') || '|');
+	IF v_actualReturnDate IS NULL THEN
+		DBMS_OUTPUT.PUT_LINE('| ' || RPAD(v_bTransID,15,' ') ||' | ' || RPAD(v_bStartDate,12,' ') || ' | ' || RPAD(v_returnDate,12,' ') || ' | '
+					|| RPAD('*', 18, ' ')  || RPAD(v_actualReturnDate,18,' ') || ' | ' || RPAD(v_finesAmt,12,' ') || ' | ' || RPAD(inputBorrowerID,11,' ') || ' | '
+					|| RPAD(inputISBN,11,' ') || '  | ' || RPAD(inputStaffID,10,' ') || ' | ');
+	ELSE
+		DBMS_OUTPUT.PUT_LINE('| ' || RPAD(v_bTransID,15,' ') ||' | ' || RPAD(v_bStartDate,12,' ') || ' | ' || RPAD(v_returnDate,12,' ') || ' | '
+					|| RPAD(v_actualReturnDate,18,' ') || ' | ' || RPAD(v_finesAmt,12,' ') || ' | ' || RPAD(inputBorrowerID,11,' ') || ' | '
+					|| RPAD(inputISBN,11,' ') || '  | ' || RPAD(inputStaffID,10,' ') || ' | ');
+
+	END IF;
+
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',125,'-') || '|');
+
+	SELECT bookCount, bookRemainCount INTO after_update_bookCount, after_update_bookRemainCount
+	FROM BOOK B
+	WHERE B.ISBN = inputISBN;	
+
+	SELECT noOfLateReturn, noOfBooksOnHand, noOfBookLost INTO after_update_noOfLateReturn, after_update_noOfBooksOnHand, after_update_noOfBookLost
+	FROM BORROWER BO
+	WHERE BO.borrowerID = inputBorrowerID;	
+
+	DBMS_OUTPUT.PUT_LINE (chr(10) || RPAD('*', 20, ' ')  || 'ISBN ' || inputISBN);
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',58,'-') || '|');
+	DBMS_OUTPUT.PUT_LINE('| ' || RPAD('*', 20, ' ') || ' | ' || RPAD('Before Update',15,' ') ||' | ' || RPAD('After Update',15,' ') || ' | ');
+	DBMS_OUTPUT.PUT_LINE('| ' || RPAD('Book Count',20,' ') ||' |   ' ||RPAD(before_update_bookCount,13,' ') ||' |   ' || RPAD(after_update_bookCount,14,' ') || '|');
+	DBMS_OUTPUT.PUT_LINE('| ' || RPAD('Remain Book Count',20,' ') ||' |   ' ||RPAD(before_update_bookRemainCount,13,' ') ||' |   ' || RPAD(after_update_bookRemainCount,14,' ') || '|');
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',58,'-') || '|');
+
+	DBMS_OUTPUT.PUT_LINE (chr(10) || RPAD('*', 20, ' ')  || 'Borrower with borrowerID ' || inputBorrowerID);
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',68,'-') || '|');
+	DBMS_OUTPUT.PUT_LINE('| ' || RPAD('*', 30, ' ') || ' | ' || RPAD('Before Update',15,' ') ||' | ' || RPAD('After Update',15,' ') || ' | ');
+	DBMS_OUTPUT.PUT_LINE('| ' || RPAD('Number of books on hand',30,' ') ||' |   ' ||RPAD(before_update_noOfBooksOnHand,13,' ') ||' |   ' || RPAD(after_update_noOfBooksOnHand,14,' ') || '|');
+	DBMS_OUTPUT.PUT_LINE('| ' || RPAD('Number of book lost',30,' ') ||' |   ' ||RPAD(before_update_noOfBookLost,13,' ') ||' |   ' || RPAD(after_update_noOfBookLost,14,' ') || '|');
+	DBMS_OUTPUT.PUT_LINE('| ' || RPAD('Number of late return',30,' ') ||' |   ' ||RPAD(before_update_noOfLateReturn,13,' ') ||' |   ' || RPAD(after_update_noOfLateReturn,14,' ') || '|');
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',68,'-') || '|' || chr(10));
+
+EXCEPTION
+	WHEN E_INVALID_BORROWERID 
+	THEN 
+    		DBMS_OUTPUT.PUT_LINE(SQLERRM);
+
+	WHEN E_INVALID_ISBN
+   	THEN
+		DBMS_OUTPUT.PUT_LINE(SQLERRM);
+
+
+	WHEN E_INVALID_TRANS
+   	THEN
+		DBMS_OUTPUT.PUT_LINE(SQLERRM);
+
+	WHEN E_INVALID_STAFFID
+   	THEN
+		DBMS_OUTPUT.PUT_LINE(SQLERRM);
+
+
+        WHEN NO_DATA_FOUND 
+        THEN
+                DBMS_OUTPUT.PUT_LINE (chr(10) || 'Transaction ' || v_bTransID || ' with borrower ID ' || inputBorrowerID || ' and ISBN '|| inputISBN || ' does not exist');
+
+ END;
+/
+
+ACCEPT IS_LOST CHAR PROMPT 'Is the book lost (Y/N)?'

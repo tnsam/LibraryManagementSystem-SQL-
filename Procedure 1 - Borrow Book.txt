@@ -1,0 +1,100 @@
+SET LINESIZE 200
+SET SERVEROUTPUT ON
+
+CREATE OR REPLACE PROCEDURE borrow_book (inputBorrowerID IN BORROWER.borrowerID%TYPE, inputISBN IN BOOK.ISBN%TYPE, inputStaffID IN STAFF.staffID%TYPE) IS
+	E_INVALID_BORROWERID EXCEPTION;
+	E_INVALID_ISBN EXCEPTION;
+	E_INVALID_STAFFID EXCEPTION;
+	E_EXCEED_BOOKSONHAND EXCEPTION;
+	E_EXCEED_BOOKSLOST EXCEPTION;
+	E_TRANS_DUPLICATE EXCEPTION;
+	PRAGMA exception_init(E_INVALID_BORROWERID, -20001);
+	PRAGMA exception_init(E_INVALID_ISBN, -20002);
+	PRAGMA exception_init(E_INVALID_STAFFID, -20003);
+	PRAGMA exception_init(E_EXCEED_BOOKSONHAND, -20004);
+	PRAGMA exception_init(E_EXCEED_BOOKSLOST, -20005);
+	PRAGMA exception_init(E_TRANS_DUPLICATE, -20006);
+	v_borrowerTypeID BORROWER_TYPE.borrowerTypeID%TYPE;
+	v_maxBooksOnHand BORROWER_TYPE.maxBooksCanBorrow%TYPE;
+	v_booksOnHand BORROWER.noOfBooksOnHand%TYPE;
+	v_noOfBookLost  BORROWER.noOfBookLost%TYPE;
+	v_returnDate BORROWER_TRANS.returnDate%TYPE;	
+	v_bTransID BORROWER_TRANS.bTransID%TYPE;
+	v_actualReturnDate BORROWER_TRANS.actualReturnDate%TYPE;
+	v_finesAmt BORROWER_TRANS.finesAmt%TYPE;
+
+BEGIN
+	IF FUN_VALIDATE_BORROWERID(inputBorrowerID) = FALSE THEN
+		RAISE_APPLICATION_ERROR(-20001, 'Invalid Borrower ID!');
+	ELSIF FUN_VALIDATE_ISBN (inputISBN) = FALSE THEN
+		RAISE_APPLICATION_ERROR(-20002, 'Invalid ISBN!');
+	ELSIF FUN_VALIDATE_STAFFID(inputStaffID) = FALSE THEN
+		RAISE_APPLICATION_ERROR(-20003, 'Invalid Staff ID!'); 
+	END IF;
+
+	DBMS_OUTPUT.PUT_LINE('VALID BORROWER ID AND ISBN');
+
+	
+	SELECT noOfbooksOnHand, noOfBookLost INTO v_booksOnHand, v_noOfBookLost
+	FROM BORROWER
+	WHERE borrowerID = inputBorrowerID;
+
+	--BORROW, INSERT NEW TRANSACTION RECORD
+	v_returnDate := FUNC_GET_RETURNDATE(TRUNC(SYSDATE), inputBorrowerID);
+	v_bTransID := 'T' || LPAD(TO_CHAR(BORROWER_TRANS_SEQ.NEXTVAL), 4, '0');
+
+	INSERT INTO BORROWER_TRANS VALUES (v_bTransID, TRUNC(SYSDATE), v_returnDate, NULL, NULL, inputBorrowerID, inputISBN, 'TS123', inputStaffID);
+
+	UPDATE BORROWER
+	SET noOfBooksOnHand = noOfBooksOnHand + 1
+	WHERE borrowerID = inputBorrowerID;
+
+	UPDATE BOOK
+	SET bookRemainCount = bookRemainCount - 1
+	WHERE ISBN = inputISBN;
+
+	v_actualReturnDate := NULL;
+	v_finesAmt := 0.0;
+	DBMS_OUTPUT.PUT_LINE (chr(10) || RPAD('-',58,'-'));
+	DBMS_OUTPUT.PUT_LINE('Borrower ' || inputBorrowerID || ' borrow book ' || inputISBN || ' successfully!');
+	DBMS_OUTPUT.PUT_LINE (RPAD('-',58,'-') || chr(10));
+
+	DBMS_OUTPUT.PUT_LINE (chr(10) || RPAD('*', 55, ' ')  || 'New Transaction Added: ');
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',126,'-') || '|');
+	DBMS_OUTPUT.PUT_LINE('| ' || RPAD('Transaction ID',15,' ') ||' | ' || RPAD('Start Date',12,' ') || ' | ' || RPAD('Return Date',12,' ') || ' | '
+			     	|| RPAD('Actual Return Date',18,' ') || ' | ' || RPAD('Fines Amount',12,' ') || ' | ' || RPAD('Borrower ID',11,' ') || ' | '
+				|| RPAD('ISBN',12,' ') || '  | ' || RPAD('Staff ID',10,' ') || ' | ');
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',126,'-') || '|');
+
+	DBMS_OUTPUT.PUT_LINE('| ' || RPAD(v_bTransID,15,' ') ||' | ' || RPAD(TRUNC(SYSDATE),12,' ') || ' | ' || RPAD(v_returnDate,12,' ') || ' | '
+				  || RPAD('*', 18, ' ')  || RPAD(v_actualReturnDate,18,' ') || ' | ' || RPAD(v_finesAmt,12,' ') || ' | ' || RPAD(inputBorrowerID,11,' ') || ' | '
+				  || RPAD(inputISBN,12,' ') || '  | ' || RPAD(inputStaffID,10,' ') || ' | ');
+	DBMS_OUTPUT.PUT_LINE ('|' || RPAD('-',126,'-') || '|');
+
+EXCEPTION
+	WHEN E_INVALID_BORROWERID 
+	THEN 
+    		DBMS_OUTPUT.PUT_LINE(SQLERRM);
+
+	WHEN E_INVALID_ISBN
+   	THEN
+		DBMS_OUTPUT.PUT_LINE(SQLERRM);
+
+	WHEN E_INVALID_STAFFID
+   	THEN
+		DBMS_OUTPUT.PUT_LINE(SQLERRM);
+
+	WHEN E_EXCEED_BOOKSONHAND
+   	THEN
+		DBMS_OUTPUT.PUT_LINE('Number of books on hand : '|| v_booksOnHand || chr(10) || 'Exceed maximum number of books can be borrowed!');
+
+	WHEN E_EXCEED_BOOKSLOST
+   	THEN
+		DBMS_OUTPUT.PUT_LINE('Number of books lost : '|| v_noOfBookLost || chr(10) || 'Exceed maximum number of books lost!');
+
+
+	WHEN E_TRANS_DUPLICATE
+   	THEN
+		DBMS_OUTPUT.PUT_LINE('Transaction ' || v_bTransID || ' duplicated!');
+END;
+/

@@ -1,0 +1,31 @@
+DROP TRIGGER TRG_INSERT_NEW_TRANSACTION;
+
+CREATE OR REPLACE TRIGGER TRG_INSERT_NEW_TRANSACTION
+BEFORE INSERT
+ON BORROWER_TRANS
+FOR EACH ROW
+
+DECLARE
+	v_maxBooksOnHand BORROWER_TYPE.maxBooksCanBorrow%TYPE;
+	v_booksOnHand BORROWER.noOfBooksOnHand%TYPE;
+	v_noOfBookLost BORROWER.noOfBookLost%TYPE;
+
+BEGIN	
+	SELECT maxBooksCanBorrow INTO v_maxBooksOnHand
+	FROM BORROWER B, BORROWER_TYPE BT
+	WHERE B.borrowerID = :NEW.borrowerID AND
+	      B.borrowerTypeID = BT.borrowerTypeID;
+
+	SELECT noOfBooksOnHand, noOfBookLost INTO v_booksOnHand, v_noOfBookLost
+	FROM BORROWER
+	WHERE borrowerID = :NEW.borrowerID;	
+
+	--CHECK IF THE BORROWER HAS EXCEED MAX NUMBER OF BOOKS CAN BE BORROWED
+	IF v_booksOnHand >= v_maxBooksOnHand THEN
+		RAISE_APPLICATION_ERROR(-20004, 'Number of books on hand : '|| v_booksOnHand || chr(10) || 'Exceed maximum number of books can be borrowed!');
+
+	ELSIF v_noOfBookLost >= 3 THEN
+		RAISE_APPLICATION_ERROR(-20005,  'Number of books lost : '|| v_noOfBookLost || chr(10) || 'Exceed maximum number of books lost!');
+	END IF;
+END;
+/

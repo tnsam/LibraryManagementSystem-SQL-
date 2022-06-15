@@ -1,0 +1,29 @@
+DROP TRIGGER TRG_UPDATE_TRANSSTATUS_AUDIT;
+
+CREATE OR REPLACE TRIGGER TRG_UPDATE_TRANSSTATUS_AUDIT
+AFTER UPDATE ON BORROWER_TRANS
+FOR EACH ROW
+
+DECLARE
+	v_oldFinesAmt NUMBER(5,2);
+	v_newFinesAmt NUMBER(5,2);
+
+BEGIN
+	IF :OLD.finesAmt IS NULL THEN
+		v_oldFinesAmt := 0.00;
+	ELSE 
+		v_oldFinesAmt := TO_CHAR(:OLD.finesAmt, 999.99);
+	END IF;
+
+	IF :NEW.finesAmt IS NULL THEN
+		v_newFinesAmt := 0.00;
+	ELSE 
+		v_newFinesAmt := TO_CHAR(:NEW.finesAmt, 999.99);
+	END IF;
+
+	INSERT INTO BORROWER_TRANS_AUDIT VALUES 
+	 (:NEW.bTransID, v_oldFinesAmt, v_newFinesAmt, :OLD.borrowerTransStatusID, 
+	  :new.borrowerTransStatusID, USER, TRUNC(SYSDATE));
+
+END;
+/
